@@ -3,30 +3,27 @@ pragma solidity ^0.8.24;
 
 // Uncomment this line to use console.log
 // import "hardhat/console.sol";
-import "erc721a/contracts/ERC721A.sol";
+import "erc721a/contracts/extensions/ERC721AQueryable.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 // Banker contract to simulate a simple lending scenario using an NFT as collateral
-contract Banker {
+contract Banker is ERC721AQueryable {
     using EnumerableMap for EnumerableMap.UintToAddressMap;
 
-    ERC721A public stakableToken;
+    ERC721AQueryable public stakableToken;
     ERC20 public lendableToken;
 
     // for simplicity of example, assumes a fixed amount for lending on all nfts
     uint256 public LOAN_AMOUNT;
     uint256 public availableForLending;
 
-    // good enough for for simulation but ideally Banker contract emits an NFT with term details in metadata
-    EnumerableMap.UintToAddressMap private lendingLedger;
-
     constructor(
         address _stakableToken,
         address _lendableToken,
         uint256 _loanAmount
-    ) {
-        stakableToken = ERC721A(_stakableToken);
+    ) ERC721A("StakedBasicNFT", "sBNFT") {
+        stakableToken = ERC721AQueryable(_stakableToken);
         lendableToken = ERC20(_lendableToken);
         LOAN_AMOUNT = _loanAmount;
     }
@@ -46,12 +43,14 @@ contract Banker {
 
         lendableToken.transfer(msg.sender, LOAN_AMOUNT);
         availableForLending -= LOAN_AMOUNT;
-        lendingLedger.set(tokenId, msg.sender);
+        
+        _safeMint(msg.sender, 1);
+
     }
 
     function repay(uint256 tokenId) public {
         require(
-            lendingLedger.get(tokenId) == msg.sender,
+            ownerOf(tokenId) == msg.sender,
             "Msg.sender is not owner of loan"
         );
         require(
@@ -67,11 +66,12 @@ contract Banker {
         stakableToken.transferFrom(address(this), msg.sender, tokenId);
 
         availableForLending += LOAN_AMOUNT;
-        lendingLedger.remove(tokenId);
+        _burn(tokenId);
     }
 
     function addFunding(uint256 amount) public {
         lendableToken.transferFrom(msg.sender, address(this), amount);
         availableForLending += amount;
     }
+
 }
